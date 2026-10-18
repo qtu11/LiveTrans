@@ -53,6 +53,56 @@ def test_vietnamese_to_english(engines):
     assert re.search(r"meeting", en, re.I)
 
 
+LONG_SENTENCE = (
+    "Let me start by thanking Addison for that magnificent introduction and for exemplifying the heart, "
+    "excellence and determination that has blossomed right here on the south side for a very long time."
+)
+
+
+def test_continuous_speech_is_assembled_into_one_sentence(tmp_path, engines):
+    """Câu nói liền ~11 giây bị cắt cưỡng bức ở 5 giây: phải ra MỘT câu chốt, không mất chữ ở chỗ cắt."""
+    from conftest import _read_wav, _tts
+    from PySide6.QtWidgets import QApplication
+
+    from livetrans.config import Config
+    from livetrans.pipeline import Pipeline
+    from livetrans.vad import SileroVAD
+
+    QApplication.instance() or QApplication([])  # QApplication (không phải QCoreApplication) để test sau vẽ được icon
+    wav = tmp_path / "long.wav"
+    _tts(wav, LONG_SENTENCE)
+    audio = np.concatenate([_read_wav(wav), np.zeros(16000, np.float32)])
+
+    asr, tr = engines
+    p = Pipeline(Config(source_language="auto"))
+    p._asr, p._translator = asr, tr
+    p._ready.set()
+    p.running = True
+    finals, partials = [], []
+    p.final_ready.connect(lambda s, i, lang, text, vi: finals.append((text, vi)))
+    p.partial_ready.connect(lambda s, i, text, vi: partials.append((text, vi)))
+
+    vad, seg = SileroVAD(), Segmenter("loopback", VadConfig())  # mặc định: cắt cưỡng bức ở 5 giây
+    events = []
+    for i, f in enumerate(frames(audio)):
+        events += seg.feed(f, vad.prob(f), i * DT)
+    events += seg.flush()
+    cuts = [e for e in events if isinstance(e, Final) and e.cut]
+    assert cuts, "câu dài phải bị cắt cưỡng bức ít nhất một lần"
+    for e in events:
+        if isinstance(e, Final):
+            p._process(e)
+
+    print(f"\n  {len(cuts)} lần cắt; bản tạm: {[t for t, _ in partials][-1:]}")
+    for text, vi in finals:
+        print(f"  CHỐT: {text}\n     => {vi}")
+    assert len(finals) == 1
+    text = finals[0][0].lower()
+    assert "heart" in text and "excellence" in text and "blossomed" in text
+    assert "it's been" not in text and "since i" not in text  # không bịa thêm câu ở chỗ cắt
+    assert partials, "trong lúc chờ câu xong phải có bản dịch tạm"
+
+
 def test_full_chain(speech_audio, engines):
     from livetrans.vad import SileroVAD
 

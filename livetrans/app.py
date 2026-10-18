@@ -355,8 +355,11 @@ def self_test(cfg: Config) -> int:
         pa = pyaudiowpatch.PyAudio()
         devices = pa.get_device_count()
         pa.terminate()
+        from PySide6.QtGui import QGuiApplication
+
         _qt = QApplication.instance() or QApplication([])
-        make_icon(True)
+        if isinstance(_qt, QGuiApplication):  # QPixmap cần QGuiApplication, nếu không Qt dừng cả tiến trình
+            make_icon(True)
         log.info("self-test: vad=%.3f resample=%d devices=%d ct2=%s", prob, resampled, devices, ctranslate2.__version__)
         profile = resolve_profile(cfg.quality)
         if profile_present(profile):

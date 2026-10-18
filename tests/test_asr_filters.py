@@ -1,4 +1,11 @@
-from livetrans.asr import StickyLanguage, collapse_repeats, is_hallucination
+from livetrans.asr import StickyLanguage, _repeats_context, collapse_repeats, is_hallucination
+
+
+def test_repeats_context_detects_copied_prompt():
+    ctx = "Let me start by thanking Addison for that magnificent introduction"
+    assert _repeats_context("magnificent introduction.", ctx)
+    assert not _repeats_context("and for exemplifying the heart", ctx)
+    assert not _repeats_context("", ctx)
 
 
 def test_hallucinations_detected():

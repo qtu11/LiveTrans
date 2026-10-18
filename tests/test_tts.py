@@ -4,7 +4,7 @@ import time
 import numpy as np
 from PySide6.QtCore import QCoreApplication
 
-from livetrans.tts import EDGE_RATE, MAX_PENDING, PIPER, SPEEDS, Speaker, decode_mp3
+from livetrans.tts import EDGE_RATE, MAX_PENDING, PIPER, SPEEDS, Speaker, boosted, decode_mp3
 
 APP = QCoreApplication.instance() or QCoreApplication([])
 VOICE_ONLINE = "vi-VN-HoaiMyNeural"
@@ -59,11 +59,12 @@ def test_speaks_in_order_with_speed_and_volume():
     eng, player = FakeEngine(), FakePlayer()
     sp = make({PIPER: eng}, player, speed="fast", volume=0.5)
     sp.say("một")
-    sp.say("hai")
+    assert wait_for(lambda: len(player.played) == 1)
+    sp.say("hai")  # câu trước đã đọc xong → không bị tụt lại → giữ tốc độ đã chọn
     assert wait_for(lambda: len(player.played) == 2)
     sp.close()
-    assert [t for t, _ in eng.synth] == ["một", "hai"]
-    assert eng.synth[0][1] == "fast" and SPEEDS["fast"] < 1
+    assert eng.synth == [("một", "fast"), ("hai", "fast")]
+    assert SPEEDS["fast"] < 1
     assert player.played == [(5000, 22050), (5000, 22050)]  # âm lượng 0,5
 
 
@@ -75,7 +76,7 @@ def test_backlog_keeps_newest_when_behind():
     assert wait_for(lambda: len(player.played) == 1)  # đang đọc câu 1
     for i in range(2, 9):
         sp.say(f"câu {i}")
-    assert wait_for(lambda: ("câu 8", "fast") in eng.synth)
+    assert wait_for(lambda: any(t == "câu 8" for t, _ in eng.synth))
     gate.set()
     assert wait_for(lambda: len(player.played) == 1 + MAX_PENDING)
     time.sleep(0.1)
@@ -94,6 +95,20 @@ def test_prefetch_synthesizes_next_while_playing():
     assert len(player.played) == 1
     gate.set()
     sp.close()
+
+
+def test_reads_faster_when_behind():
+    gate = threading.Event()
+    eng, player = FakeEngine(), FakePlayer(block=gate)
+    sp = make({PIPER: eng}, player, speed="fast")
+    sp.say("câu 1")
+    assert wait_for(lambda: len(player.played) == 1)  # đang đọc câu 1
+    sp.say("câu 2")  # tới khi máy còn đang đọc → tổng hợp nhanh hơn một bậc
+    assert wait_for(lambda: len(eng.synth) == 2)
+    gate.set()
+    sp.close()
+    assert eng.synth == [("câu 1", "fast"), ("câu 2", "faster")]
+    assert boosted("rush") == "rush" and boosted("slow") == "normal"
 
 
 def test_stop_speaking_interrupts_and_clears():

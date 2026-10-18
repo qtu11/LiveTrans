@@ -14,6 +14,7 @@ from PySide6.QtCore import QObject, Signal
 from .audio_capture import SOURCE_LABELS, AudioSource, shutdown_portaudio
 from .config import Config, VadConfig
 from .segmenter import Event, Final, Segmenter
+from .sentences import SentenceAssembler, join_text
 from .vad import FRAME, SileroVAD
 from .work_queue import WorkQueue
 
@@ -98,6 +99,8 @@ class Pipeline(QObject):
         self.profile = None
         self._final_times: deque[float] = deque(maxlen=7)
         self._slow_warned = False
+        self._sentences = SentenceAssembler()  # chỉ dùng trên worker thread
+        self._reset_sentences = False
         self._ready = threading.Event()
         self._retry = threading.Event()
         self._reload = threading.Event()
@@ -137,6 +140,7 @@ class Pipeline(QObject):
         self.running = False
         self._stop_sources()
         self.queue.clear()
+        self._reset_sentences = True  # bỏ phần câu đang giữ
         log.info("tạm dừng")
         self.running_changed.emit(False)
         self.status_changed.emit("Tạm dừng", False)
@@ -150,6 +154,7 @@ class Pipeline(QObject):
         if self.running:
             self._stop_sources()
             self.queue.clear(partials_only=True)
+            self._reset_sentences = True  # bỏ phần câu đang giữ
             self._start_sources()
             if self.ready:
                 self.status_changed.emit(self.listening_text(), False)
@@ -159,6 +164,7 @@ class Pipeline(QObject):
         if self.running:
             self._stop_sources()
             self.queue.clear(partials_only=True)
+            self._reset_sentences = True  # bỏ phần câu đang giữ
             self._start_sources()
 
     def set_source_language(self, lang: str) -> None:
@@ -271,6 +277,7 @@ class Pipeline(QObject):
                 self._retry.clear()
                 self._ready.clear()
                 self.queue.clear()
+                self._reset_sentences = True  # bỏ phần câu đang giữ
                 self._asr = self._translator = None  # giải phóng model cũ trước khi nạp model mới
                 need_load = not self._load_models()
                 if need_load:
@@ -287,35 +294,58 @@ class Pipeline(QObject):
                     self.segment_dropped.emit(ev.source, ev.seg_id)
 
     def _process(self, ev: Event) -> None:
+        if self._reset_sentences:
+            self._reset_sentences = False
+            self._sentences.clear()
         t0 = time.perf_counter()
         dur = len(ev.audio) / 16000
+        label = SOURCE_LABELS.get(ev.source, ev.source)
+        held = self._sentences.held(ev.source)
+        context, context_lang = (held.text, held.lang) if held else (None, None)
+
         if isinstance(ev, Final):
-            res = self._asr.transcribe(ev.audio, "final", ev.source)
-            if res is None:
-                self.segment_dropped.emit(ev.source, ev.seg_id)
-                return
+            res = self._asr.transcribe(ev.audio, "final", ev.source, context=context, context_lang=context_lang)
             t1 = time.perf_counter()
-            vi = self._translator.translate(res.text, res.lang)
+            if res is None:
+                # Mẩu không có lời: người nói đã ngừng → chốt phần câu đang giữ (nếu có)
+                commits = [] if ev.cut else self._sentences.flush(ev.source)
+                langs = [context_lang] * len(commits)
+                holding = None
+                if not commits:
+                    self.segment_dropped.emit(ev.source, ev.seg_id)
+            else:
+                commits, holding = self._sentences.push(ev.source, res.lang, res.text, ev.cut)
+                langs = self._sentences.last_langs
+            for text, lang in zip(commits, langs):
+                vi = self._translator.translate(text, lang)
+                self.final_ready.emit(ev.source, ev.seg_id, lang, text, vi or "")
+                log.info("[%s#%d %s] câu chốt => %s | %s", label, ev.seg_id, lang, vi, text)
             t2 = time.perf_counter()
-            self.final_ready.emit(ev.source, ev.seg_id, res.lang, res.text, vi or "")
             log.info(
-                "[%s#%d %s %.1fs] asr %.2fs, dịch %.2fs | %s => %s",
-                SOURCE_LABELS.get(ev.source, ev.source), ev.seg_id, res.lang, dur, t1 - t0, t2 - t1, res.text, vi,
+                "[%s#%d %.1fs%s] asr %.2fs, dịch %.2fs | %s%s",
+                label, ev.seg_id, dur, " cắt" if ev.cut else "", t1 - t0, t2 - t1,
+                res.text if res else "(không có lời)", " [ngữ cảnh]" if context else "",
             )
+            if holding:  # câu chưa xong → hiện bản dịch tạm của phần đã nghe, chờ mẩu tiếp theo
+                self.partial_ready.emit(ev.source, ev.seg_id + 1, holding, "")
+                if self.cfg.translate_preview and self.queue.pending_finals() == 0:
+                    vi = self._translator.translate(holding, res.lang, beam_size=1)
+                    self.partial_ready.emit(ev.source, ev.seg_id + 1, holding, vi or "")
             self.final_timing.emit(t2 - t0)
             self._check_speed(t2 - t0)
         else:
             if not self.running:
                 return
-            res = self._asr.transcribe(ev.audio, "partial", ev.source)
+            res = self._asr.transcribe(ev.audio, "partial", ev.source, context=context, context_lang=context_lang)
             if res is None:
                 return
-            self.partial_ready.emit(ev.source, ev.seg_id, res.text, "")
+            text = join_text(context, res.text, res.lang) if context else res.text
+            self.partial_ready.emit(ev.source, ev.seg_id, text, "")
             # Dịch tạm câu đang nói — bỏ qua nếu đã có câu chốt đang chờ (ưu tiên độ trễ câu chốt).
             if self.cfg.translate_preview and self.queue.pending_finals() == 0:
-                vi = self._translator.translate(res.text, res.lang, beam_size=1)
+                vi = self._translator.translate(text, res.lang, beam_size=1)
                 if vi and self.queue.pending_finals() == 0:
-                    self.partial_ready.emit(ev.source, ev.seg_id, res.text, vi)
+                    self.partial_ready.emit(ev.source, ev.seg_id, text, vi)
             log.debug("partial %s#%d %.1fs: %.2fs", ev.source, ev.seg_id, dur, time.perf_counter() - t0)
 
     def _check_speed(self, seconds: float) -> None:

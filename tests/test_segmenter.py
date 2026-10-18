@@ -37,6 +37,7 @@ def test_speech_then_silence_emits_one_final():
     assert len(fs) == 1
     assert fs[0].seg_id == 1
     assert fs[0].source == "loopback"
+    assert fs[0].cut is False  # kết thúc vì người nói ngừng
     dur = len(fs[0].audio) / 16000
     assert 2.0 <= dur <= 2.5
 
@@ -66,9 +67,11 @@ def test_max_segment_cut_at_lowest_prob():
     assert len(fs) == 1
     n_frames = len(fs[0].audio) / FRAME
     assert abs(n_frames - 226) <= 1
+    assert fs[0].cut is True  # cắt cưỡng bức → người nói chưa dừng
     rest = seg.flush()
     assert len(rest) == 1 and isinstance(rest[0], Final)
     assert rest[0].seg_id == 2
+    assert rest[0].cut is False
 
 
 def test_tick_closes_segment_when_data_stops():

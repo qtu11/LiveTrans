@@ -165,7 +165,7 @@ class Transcriber:
         return token[2:-2], float(prob)
 
     @staticmethod
-    def _run(model, audio: np.ndarray, language: str, mode: str) -> str:
+    def _run(model, audio: np.ndarray, language: str, mode: str, prompt: str | None = None) -> str:
         final = mode == "final"
         segments, _ = model.transcribe(
             audio,
@@ -176,6 +176,7 @@ class Transcriber:
             without_timestamps=True,
             vad_filter=False,
             condition_on_previous_text=False,
+            initial_prompt=prompt or None,
         )
         parts = []
         for seg in segments:
@@ -184,13 +185,24 @@ class Transcriber:
             parts.append(seg.text.strip())
         return " ".join(p for p in parts if p)
 
-    def transcribe(self, audio: np.ndarray, mode: str, source: str) -> AsrResult | None:
+    def transcribe(
+        self,
+        audio: np.ndarray,
+        mode: str,
+        source: str,
+        context: str | None = None,
+        context_lang: str | None = None,
+    ) -> AsrResult | None:
+        """``context``: phần câu ngay trước (mẩu bị cắt giữa câu) — đưa vào Whisper làm ``initial_prompt`` để
+        nhận dạng nối tiếp đúng chữ ở chỗ cắt; khi đó dùng luôn ngôn ngữ ``context_lang`` của mẩu trước."""
         if self._model is None:
             raise RuntimeError("Transcriber chưa được load()")
         model = self._model if mode == "final" else self._preview
         prob = 1.0
         if self.forced_language:
             lang = self.forced_language
+        elif context and context_lang:
+            lang = context_lang
         elif mode == "partial" and self.sticky.get(source):
             lang = self.sticky.get(source)
         else:
@@ -199,7 +211,19 @@ class Transcriber:
             if lang != detected:
                 log.debug("ngôn ngữ %s (%.2f) không chắc, dùng lại %s", detected, prob, lang)
 
-        text = collapse_repeats(self._run(model, audio, lang, mode))
-        if is_hallucination(text):
+        # Ngữ cảnh luôn là câu chưa xong (mẩu bị cắt): bỏ dấu câu cuối mà Whisper tự thêm ở chỗ cắt, nếu không
+        # Whisper coi câu đã kết thúc và "bịa" phần mở đầu cho mẩu mới.
+        prompt = context[-CONTEXT_CHARS:].rstrip(" .!?…。！？") if context else None
+        text = collapse_repeats(self._run(model, audio, lang, mode, prompt))
+        if is_hallucination(text) or (prompt and _repeats_context(text, prompt)):
             return None
         return AsrResult(text=text, lang=lang, lang_prob=prob)
+
+
+CONTEXT_CHARS = 200
+
+
+def _repeats_context(text: str, context: str) -> bool:
+    """Whisper đôi khi chỉ chép lại prompt khi mẩu mới không có lời nói rõ ràng."""
+    norm = _normalize(text)
+    return bool(norm) and norm in _normalize(context)

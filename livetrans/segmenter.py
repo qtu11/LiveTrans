@@ -28,6 +28,7 @@ class Final:
     source: str
     seg_id: int
     audio: np.ndarray
+    cut: bool = False  # True: cắt cưỡng bức ở max_segment_s, người nói chưa dừng (thường giữa câu)
 
 
 Event = Partial | Final
@@ -142,7 +143,7 @@ class Segmenter:
         n = len(self._frames)
         start = max(1, n - self._cut_window)
         idx = start + int(np.argmin(self._probs[start:]))
-        event = Final(self.source, self._seg_id, np.concatenate(self._frames[: idx + 1]))
+        event = Final(self.source, self._seg_id, np.concatenate(self._frames[: idx + 1]), cut=True)
 
         self._frames = self._frames[idx + 1 :]
         self._probs = self._probs[idx + 1 :]

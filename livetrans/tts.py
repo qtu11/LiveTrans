@@ -39,8 +39,15 @@ EDGE_VOICES = {"vi-VN-HoaiMyNeural": "HoaiMy (nữ)", "vi-VN-NamMinhNeural": "Na
 VOICES = (PIPER, *EDGE_VOICES)
 
 # Tốc độ đọc: length_scale của Piper (< 1 là nhanh hơn) và rate của Edge
-SPEEDS = {"slow": 1.15, "normal": 1.0, "fast": 0.85, "faster": 0.72}
-EDGE_RATES = {"slow": "-10%", "normal": "+0%", "fast": "+15%", "faster": "+30%"}
+SPEEDS = {"slow": 1.15, "normal": 1.0, "fast": 0.85, "faster": 0.72, "rush": 0.64}
+EDGE_RATES = {"slow": "-10%", "normal": "+0%", "fast": "+15%", "faster": "+30%", "rush": "+45%"}
+_SPEED_ORDER = ["slow", "normal", "fast", "faster", "rush"]
+
+
+def boosted(speed: str) -> str:
+    """Tốc độ cao hơn một bậc — dùng khi đang có câu chờ đọc, để bám kịp người nói thay vì bỏ câu."""
+    i = _SPEED_ORDER.index(speed) if speed in _SPEED_ORDER else 2
+    return _SPEED_ORDER[min(i + 1, len(_SPEED_ORDER) - 1)]
 EDGE_RATE = 24000
 EDGE_TIMEOUT_S = 6
 # Dịch vụ miễn phí của Edge đôi khi đóng kết nối mà không trả âm thanh (~2,6 s mỗi lần lỗi). Sau một lần lỗi,
@@ -224,19 +231,19 @@ class Speaker(QObject):
             self.state_changed.emit("ready", "")
         return self._engines[voice]
 
-    def _synthesize(self, text: str) -> tuple[np.ndarray, int]:
+    def _synthesize(self, text: str, speed: str) -> tuple[np.ndarray, int]:
         voice = self.voice
         if voice != PIPER and self._clock() < self._online_blocked_until:
             voice = PIPER  # giọng online vừa lỗi → tạm dùng giọng offline
         try:
-            return self._engine(voice).synthesize(text, self.speed)
+            return self._engine(voice).synthesize(text, speed)
         except Exception as e:
             if voice == PIPER:
                 raise
             log.warning("giọng online lỗi (%s: %s) → giọng offline %.0f giây", type(e).__name__, e, ONLINE_COOLDOWN_S)
             self._online_blocked_until = self._clock() + ONLINE_COOLDOWN_S
             self.state_changed.emit("fallback", "Giọng online không phản hồi — tạm đọc bằng giọng offline")
-            return self._engine(PIPER).synthesize(text, self.speed)
+            return self._engine(PIPER).synthesize(text, speed)
 
     def _synth_loop(self) -> None:
         try:
@@ -252,8 +259,10 @@ class Speaker(QObject):
                     return
                 text = self._texts.popleft()
                 generation = self._generation
+                behind = bool(self._texts) or bool(self._ready) or self.speaking
+            speed = boosted(self.speed) if behind else self.speed
             try:
-                audio, rate = self._synthesize(text)
+                audio, rate = self._synthesize(text, speed)
             except Exception as e:
                 log.exception("lỗi khi tổng hợp giọng")
                 self.state_changed.emit("error", f"Lỗi giọng đọc: {e}")
@@ -263,7 +272,7 @@ class Speaker(QObject):
                     continue  # đã bấm dừng trong lúc tổng hợp
                 self._ready.append((text, audio, rate))
                 while len(self._ready) > MAX_PENDING:
-                    self._ready.popleft()
+                    log.info("đọc không kịp, bỏ câu đã tổng hợp: %s", self._ready.popleft()[0][:60])
                 self._cond.notify_all()
 
     def _play_loop(self) -> None:
