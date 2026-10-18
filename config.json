@@ -1,0 +1,26 @@
+{
+  "source_mode": "loopback",
+  "quality": "auto",
+  "cpu_threads": 4,
+  "translate_preview": true,
+  "source_language": "auto",
+  "font_size": "medium",
+  "overlay_pos": null,
+  "overlay_width_ratio": 0.6,
+  "compose_hide_after_copy": true,
+  "hotkeys": {
+    "toggle": "Ctrl+Alt+T",
+    "overlay": "Ctrl+Alt+H",
+    "source": "Ctrl+Alt+M",
+    "compose": "Ctrl+Alt+V"
+  },
+  "vad": {
+    "start_threshold": 0.5,
+    "end_threshold": 0.35,
+    "min_silence_ms": 600,
+    "min_speech_ms": 250,
+    "max_segment_s": 8.0,
+    "pre_roll_ms": 200,
+    "partial_interval_s": 2.0
+  }
+}

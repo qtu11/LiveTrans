@@ -1,0 +1,10 @@
+[project]
+name = "livetrans"
+version = "0.1.0"
+description = "Phiên dịch âm thanh thời gian thực (offline) sang tiếng Việt"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = ["slow: cần model đã tải (chạy bằng: pytest -m slow -s)"]

@@ -1,0 +1,7 @@
+faster-whisper==1.2.1
+ctranslate2>=4.6,<5
+sentencepiece>=0.2
+PyAudioWPatch>=0.2.12
+PySide6-Essentials>=6.9,<7
+piper-tts==1.8.0
+numpy>=2.0
