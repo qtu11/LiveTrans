@@ -17,7 +17,7 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
-    hiddenimports=["pyaudiowpatch", "sentencepiece", "piper", "piper.espeakbridge"],
+    hiddenimports=["pyaudiowpatch", "sentencepiece", "piper", "piper.espeakbridge", "edge_tts", "aiohttp", "certifi"],
     excludes=["tkinter", "pytest", "IPython", "matplotlib", "PyInstaller", "setuptools", "pip"],
     noarchive=False,
 )

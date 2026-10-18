@@ -4,4 +4,5 @@ sentencepiece>=0.2
 PyAudioWPatch>=0.2.12
 PySide6-Essentials>=6.9,<7
 piper-tts==1.8.0
+edge-tts==7.3.1
 numpy>=2.0

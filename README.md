@@ -51,9 +51,16 @@ Thanh phụ đề luôn hiển thị khi đang dịch (kéo chuột để đổi
 Khi người nói ngắt câu (hoặc sau tối đa 5 giây), bản dịch chính thức (chữ lớn) xuất hiện sau ~2–4 giây
 tuỳ máy và chế độ chất lượng.
 
-**Giọng đọc (lồng tiếng):** khi bật, mỗi câu tiếng nước ngoài sau khi dịch sẽ được đọc to bằng tiếng Việt
-(giọng Piper `vi_VN-vais1000-medium`, offline). Nếu đọc không kịp, câu cũ được bỏ qua để luôn bám theo câu mới
-nhất. Với nguồn **Loa**, LiveTrans bắt âm thanh hệ thống **trừ tiếng của chính nó** (WASAPI process loopback,
+**Giọng đọc (lồng tiếng):** khi bật, mỗi câu tiếng nước ngoài sau khi dịch sẽ được đọc to bằng tiếng Việt.
+Chọn giọng:
+
+| Giọng | Chạy ở đâu | Ghi chú |
+|---|---|---|
+| Piper (`vi_VN-vais1000-medium`) | Offline | Luôn có, nhanh (~0,15 giây/câu), hơi giống giọng máy |
+| HoaiMy (nữ) / NamMinh (nam) | Online — dịch vụ "Đọc to" của Microsoft Edge | Tự nhiên như người thật; cần Internet, gửi câu đã dịch (chữ) tới Microsoft. Dịch vụ miễn phí, không chính thức — có lúc không phản hồi (đo ngày 18/10/2026: ~50% số câu); khi đó LiveTrans tạm đọc bằng Piper trong 45 giây rồi thử lại |
+
+Câu kế tiếp được tổng hợp sẵn trong lúc đang đọc câu hiện tại. Nếu đọc không kịp, câu cũ được bỏ qua để luôn
+bám theo câu mới nhất. Với nguồn **Loa**, LiveTrans bắt âm thanh hệ thống **trừ tiếng của chính nó** (WASAPI process loopback,
 Windows 10 2004+) nên giọng đọc không bị dịch lại. Với **Micro**, nên đeo tai nghe.
 
 **Gõ tiếng Việt → English:** `Ctrl+Alt+V` (hoặc tab Gõ Việt → Anh) → gõ tiếng Việt (Unikey/EVKey bình thường)
@@ -75,6 +82,7 @@ Nếu máy xử lý không kịp, app sẽ báo và gợi ý chọn chất lư�
 | `font_size` | `medium` | `small` / `medium` / `large` |
 | `compose_hide_after_copy` | `true` | Ô gõ Việt → Anh tự xoá + ẩn sau khi copy |
 | `tts_enabled` / `tts_speed` / `tts_volume` | `false` / `fast` / `0.9` | Giọng đọc: bật/tắt, tốc độ (`slow`/`normal`/`fast`/`faster`), âm lượng 0–1 |
+| `tts_voice` | `piper` | `piper` · `vi-VN-HoaiMyNeural` · `vi-VN-NamMinhNeural` |
 | `hotkeys` | xem trên | Ví dụ `"Ctrl+Shift+F9"` |
 | `vad.*` | | Ngưỡng cắt câu: `min_silence_ms` (450), `max_segment_s` (5), `partial_interval_s` (1.5)… |
 

@@ -56,7 +56,7 @@ class App:
         self.tray = Tray(cfg.source_mode, cfg.font_size, cfg.quality, cfg.hotkeys)
         self.tray.set_overlay_visible(cfg.overlay_visible)
         self.tray.set_tts_enabled(cfg.tts_enabled)
-        self.speaker = Speaker(cfg.tts_speed, cfg.tts_volume)
+        self.speaker = Speaker(cfg.tts_voice, cfg.tts_speed, cfg.tts_volume)
         self.text_service = TextTranslateService(lambda: self.pipeline.translator, src="vi", tgt="en")
         self.compose = ComposeWidget(self.text_service, cfg.compose_hide_after_copy, cfg.hotkeys.compose)
         self.window = MainWindow(
@@ -100,6 +100,7 @@ class App:
         t.quit_requested.connect(QApplication.quit)
 
         w.tts_toggled.connect(self.set_tts)
+        w.tts_voice_selected.connect(self.set_tts_voice)
         w.tts_speed_selected.connect(self.set_tts_speed)
         w.tts_volume_changed.connect(self.set_tts_volume)
         w.tts_test_requested.connect(lambda: self._speak("Xin chào, đây là giọng đọc của LiveTrans.", force=True))
@@ -175,7 +176,8 @@ class App:
             self.speaker.say(text)
 
     def _on_tts_state(self, state: str, detail: str) -> None:
-        labels = {"loading": "Đang nạp giọng đọc…", "ready": "Sẵn sàng", "speaking": "🔊 Đang đọc…"}
+        labels = {"loading": "Đang nạp giọng đọc…", "ready": "Sẵn sàng", "speaking": "Đang đọc…",
+                  "fallback": "Mạng lỗi · tạm dùng giọng offline"}
         self.window.set_tts_state(labels.get(state, detail))
         if state == "error":
             self.tray.notify("LiveTrans", detail)
@@ -194,6 +196,12 @@ class App:
             self.window.set_tts_state("")
         self.overlay.show_status("Đã bật giọng đọc" if enabled else "Đã tắt giọng đọc")
         self.pipeline.restart_sources()  # nguồn Loa đổi sang/khỏi chế độ bỏ qua tiếng của LiveTrans
+        self.save()
+
+    def set_tts_voice(self, voice: str) -> None:
+        log.info("giọng đọc: %s", voice)
+        self.cfg.tts_voice = voice
+        self.speaker.set_voice(voice)
         self.save()
 
     def set_tts_speed(self, speed: str) -> None:
@@ -364,14 +372,17 @@ def self_test(cfg: Config) -> int:
             log.info("self-test [%s]: dịch thử %r", profile.key, tr.translate("Hello, how are you?", "en"))
         else:
             log.info("self-test: chưa có model của chế độ %s, bỏ qua bước nạp model", profile.key)
+        import certifi
+        import edge_tts
+
+        log.info("self-test: edge-tts %s, chứng chỉ %s", edge_tts.__version__, os.path.exists(certifi.where()))
         from .tts import voice_present
 
         if voice_present():
-            from .tts import _PiperEngine
+            from .tts import PiperEngine
 
-            engine = _PiperEngine()
-            audio = engine.synthesize("Xin chào.", 1.0)
-            log.info("self-test: giọng đọc tạo %.2f giây âm thanh", len(audio) / engine.sample_rate)
+            audio, rate = PiperEngine().synthesize("Xin chào.", "normal")
+            log.info("self-test: giọng đọc tạo %.2f giây âm thanh", len(audio) / rate)
         else:
             log.info("self-test: chưa có giọng đọc, bỏ qua")
         log.info("self-test OK")

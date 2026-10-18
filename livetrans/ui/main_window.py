@@ -54,6 +54,11 @@ QUALITIES = [
 ]
 SPEEDS = [("fast", "Nhanh · câu ≤ 5 giây"), ("standard", "Chuẩn · câu ≤ 8 giây")]
 TTS_SPEEDS = [("slow", "Chậm"), ("normal", "Vừa"), ("fast", "Nhanh"), ("faster", "Rất nhanh")]
+TTS_VOICES = [
+    ("piper", "Piper · offline"),
+    ("vi-VN-HoaiMyNeural", "HoaiMy · nữ · online"),
+    ("vi-VN-NamMinhNeural", "NamMinh · nam · online"),
+]
 FONT_SIZES = [("small", "Nhỏ"), ("medium", "Vừa"), ("large", "Lớn")]
 LANGUAGES = [
     ("auto", "Tự nhận diện"), ("en", "English"), ("ja", "日本語"), ("zh", "中文"), ("ko", "한국어"),
@@ -113,6 +118,7 @@ class MainWindow(QWidget):
     source_language_selected = Signal(str)
     autostart_changed = Signal(bool)
     tts_toggled = Signal(bool)
+    tts_voice_selected = Signal(str)
     tts_speed_selected = Signal(str)
     tts_volume_changed = Signal(float)
     tts_test_requested = Signal()
@@ -304,7 +310,7 @@ class MainWindow(QWidget):
         titles = QVBoxLayout()
         titles.setSpacing(0)
         titles.addWidget(label("Đọc to bản dịch tiếng Việt", f=theme.font("body", 10.5, QFont.Weight.DemiBold)))
-        titles.addWidget(label("Lồng tiếng các câu nói tiếng nước ngoài bằng giọng đọc offline.", "muted",
+        titles.addWidget(label("Lồng tiếng các câu nói tiếng nước ngoài sau khi dịch.", "muted",
                                theme.font("body", 8.5), wrap=True))
         head.addLayout(titles, 1)
         self.tts_state = label("", "chipAmber")
@@ -315,6 +321,15 @@ class MainWindow(QWidget):
         self.tts_switch.toggled.connect(self.tts_toggled)
         head.addWidget(self.tts_switch)
         v.addLayout(head)
+
+        voices = QHBoxLayout()
+        voices.setSpacing(10)
+        voices.addWidget(label("Giọng", "muted"))
+        self.tts_voice_seg = Segmented(TTS_VOICES, cfg.tts_voice)
+        self.tts_voice_seg.changed.connect(self.tts_voice_selected)
+        voices.addWidget(self.tts_voice_seg)
+        voices.addStretch()
+        v.addLayout(voices)
 
         row = QHBoxLayout()
         row.setSpacing(10)
@@ -335,8 +350,11 @@ class MainWindow(QWidget):
         test.clicked.connect(self.tts_test_requested)
         row.addWidget(test)
         v.addLayout(row)
-        v.addWidget(label("Nguồn Loa tự bỏ qua giọng đọc của LiveTrans. Dùng Micro thì nên đeo tai nghe.",
-                          "muted", theme.font("body", 8.5), wrap=True))
+        v.addWidget(label(
+            "Giọng online (Microsoft) tự nhiên hơn nhưng cần Internet và gửi câu đã dịch (dạng chữ) tới Microsoft; "
+            "khi không phản hồi, LiveTrans tạm đọc bằng giọng offline. Nguồn Loa tự bỏ qua giọng đọc của LiveTrans; "
+            "dùng Micro thì nên đeo tai nghe.",
+            "muted", theme.font("body", 8.5), wrap=True))
         return vcard
 
     # ------------------------------------------------------------ compose

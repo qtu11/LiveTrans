@@ -13,8 +13,12 @@ SOURCE_MODES = ("loopback", "mic", "both")
 FONT_SIZES = ("small", "medium", "large")
 QUALITIES = ("auto", "fast", "balanced", "accurate")
 TTS_SPEEDS = ("slow", "normal", "fast", "faster")
+TTS_VOICES = ("piper", "vi-VN-HoaiMyNeural", "vi-VN-NamMinhNeural")  # khớp tts.VOICES
 
-_CHOICES = {"source_mode": SOURCE_MODES, "font_size": FONT_SIZES, "quality": QUALITIES, "tts_speed": TTS_SPEEDS}
+_CHOICES = {
+    "source_mode": SOURCE_MODES, "font_size": FONT_SIZES, "quality": QUALITIES, "tts_speed": TTS_SPEEDS,
+    "tts_voice": TTS_VOICES,
+}
 
 
 CONFIG_VERSION = 2  # v2: cắt câu ngắn hơn (preset "fast"), phụ đề không tự ẩn
@@ -74,6 +78,7 @@ class Config:
     overlay_autohide: bool = False  # True = mờ dần khi im lặng 8 giây
     compose_hide_after_copy: bool = True
     tts_enabled: bool = False  # đọc to bản dịch tiếng Việt
+    tts_voice: str = "piper"  # piper (offline) / giọng Microsoft online (TTS_VOICES)
     tts_speed: str = "fast"  # slow / normal / fast / faster (tts.SPEEDS)
     tts_volume: float = 0.9
     hotkeys: HotkeyConfig = field(default_factory=HotkeyConfig)
